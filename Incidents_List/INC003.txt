@@ -1,0 +1,18 @@
+Incident ID: INC003
+
+Title: Application performance degradation
+
+Description:
+Users reported that the application was loading very slowly.
+Some pages were taking more than 15 seconds to load.
+
+Investigation:
+Monitoring tools indicated high CPU usage on the application server.
+Database queries were taking longer than expected.
+
+Root Cause:
+A recently deployed feature introduced inefficient database queries causing high load.
+
+Resolution:
+The problematic queries were optimized and indexing was added to the database tables.
+After the fix, application performance returned to normal.

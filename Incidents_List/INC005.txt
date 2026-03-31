@@ -1,0 +1,16 @@
+Incident ID: INC005
+
+Title: File upload failing in document portal
+
+Description:
+Users were unable to upload documents in the document management system.
+An error message "File upload failed" appeared after selecting the file.
+
+Investigation:
+Server logs showed that the upload service was rejecting files larger than 5MB.
+
+Root Cause:
+A configuration change reduced the allowed upload size unintentionally.
+
+Resolution:
+The file upload size limit was increased to 50MB and the service was restarted.
