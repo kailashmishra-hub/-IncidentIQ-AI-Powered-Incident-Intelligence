@@ -1,5 +1,0 @@
-Artificial Intelligence is transforming many industries across the world.
-Machine learning is a subset of AI that allows systems to learn from data.
-Large Language Models are used in applications like chatbots and question answering systems.
-Retrieval Augmented Generation (RAG) improves AI responses by retrieving relevant documents from a knowledge base.
-Vector databases like FAISS and Weaviate are commonly used in RAG systems.
