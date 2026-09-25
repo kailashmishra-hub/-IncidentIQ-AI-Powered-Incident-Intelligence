@@ -353,7 +353,10 @@ def meaningful_tokens(text: str) -> set[str]:
     stop_words = {
         "a", "an", "and", "are", "for", "in", "is", "of", "on", "the",
         "to", "was", "were", "with", "issue", "issues", "incident",
-        "incidents", "problem", "problems",
+        "incidents", "problem", "problems", "user", "users", "customer",
+        "customers", "application", "applications", "app", "apps", "system",
+        "systems", "service", "services", "cannot", "unable", "failed",
+        "failing",
     }
     return {
         token.rstrip("s")

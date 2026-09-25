@@ -73,3 +73,10 @@ def test_chat_scope_requires_exact_repository_label():
     assert app.scope_label_is_repository(" repository ")
     assert not app.scope_label_is_repository("OUT_OF_SCOPE")
     assert not app.scope_label_is_repository("REPOSITORY\nHere is an answer")
+
+
+def test_natural_language_and_short_issue_query_share_core_terms():
+    assert app.meaningful_tokens("Users cannot login to the application") == {
+        "login"
+    }
+    assert app.meaningful_tokens("Login issues") == {"login"}
