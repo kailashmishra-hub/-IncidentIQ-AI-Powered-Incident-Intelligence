@@ -349,20 +349,7 @@ def weighted_retrieval_text(text: str) -> str:
 
 def meaningful_tokens(text: str) -> set[str]:
     """Normalize words for a small lexical signal alongside semantic search."""
-    normalized = re.sub(r"\blog[ -]?in\b", "login", text.lower())
-    normalized = re.sub(r"\bsign[ -]?in\b", "login", normalized)
-    normalized = re.sub(
-        r"\b(?:cannot|can't|unable to|not able to)\s+(?:login|authenticate)\b",
-        "authenticationfailure login",
-        normalized,
-    )
-    normalized = re.sub(
-        r"\b(?:login|authentication)\s+(?:failure|failures|failed)\b",
-        "authenticationfailure login",
-        normalized,
-    )
-    normalized = re.sub(r"\b(?:users?|customers?|end users?)\b", "customer", normalized)
-    normalized = re.sub(r"\b(?:apps?|applications?|banking portals?)\b", "application", normalized)
+    normalized = text.lower()
     stop_words = {
         "a", "an", "and", "are", "for", "in", "is", "of", "on", "the",
         "to", "was", "were", "with",
@@ -396,74 +383,11 @@ def field_weighted_lexical_coverage(query: str, incident: str) -> float:
     return 0.50 * title_score + 0.35 * detail_score + 0.15 * overall_score
 
 
-def authentication_availability_query(text: str) -> bool:
-    """Identify queries about legitimate users being unable to authenticate."""
-    normalized = text.lower()
-    return bool(
-        re.search(
-            r"(?:cannot|can't|unable to|not able to)\s+(?:log[ -]?in|sign[ -]?in|authenticate)",
-            normalized,
-        )
-        or re.search(
-            r"(?:login|sign[ -]?in|authentication)\s+(?:failure|failures|failed|outage|error)",
-            normalized,
-        )
-    )
-
-
-def intent_adjustment(query: str, incident: str) -> float:
-    """Reward matching login outages and reject security-only login events."""
-    if not authentication_availability_query(query):
-        return 0.0
-
-    normalized = incident.lower()
-    availability_markers = (
-        "unable to verify",
-        "unable to login",
-        "unable to log in",
-        "login failures",
-        "authentication failure",
-        "failed login attempts",
-        "login attempts failed",
-        "could not login",
-        "could not log in",
-        "generic error",
-        "denial-of-service",
-        "denial of service",
-        "ddos",
-        "login page unavailable",
-    )
-    security_markers = (
-        "unauthorized access",
-        "unauthorized login",
-        "attacker",
-        "compromised account",
-        "compromised credential",
-        "credential stuffing",
-        "brute force",
-        "data breach",
-        "privileged administrator",
-        "privileged account",
-        "successful login from",
-    )
-    has_availability_signal = any(marker in normalized for marker in availability_markers)
-    has_security_signal = any(marker in normalized for marker in security_markers)
-
-    # Security incidents may mention many login attempts, but they are not service
-    # availability matches when the user asks about legitimate users being blocked.
-    if has_security_signal:
-        return -0.40
-    if has_availability_signal:
-        return 0.12
-    return 0.0
-
-
-def hybrid_relevance_score(query: str, incident: str, semantic_score: float) -> tuple[float, float, float]:
-    """Combine semantic, lexical, and intent signals into a bounded score."""
+def hybrid_relevance_score(query: str, incident: str, semantic_score: float) -> tuple[float, float]:
+    """Combine generic semantic and field-weighted lexical relevance."""
     word_score = field_weighted_lexical_coverage(query, incident)
-    adjustment = intent_adjustment(query, incident)
-    score = 0.65 * semantic_score + 0.35 * word_score + adjustment
-    return max(0.0, min(1.0, score)), word_score, adjustment
+    score = 0.70 * semantic_score + 0.30 * word_score
+    return max(0.0, min(1.0, score)), word_score
 
 
 def filter_by_six_month_window(
@@ -547,7 +471,7 @@ def find_similar_incidents(
         # original incident row without repeated fields.
         doc.page_content = str(doc.metadata.get("original_content", doc.page_content))
         semantic_score = max(0.0, min(1.0, 1.0 - float(distance) / 2.0))
-        hybrid_score, word_score, adjustment = hybrid_relevance_score(
+        hybrid_score, word_score = hybrid_relevance_score(
             query, doc.page_content, semantic_score
         )
         # Semantic retrieval supplies meaning; lexical coverage protects short,
@@ -555,9 +479,9 @@ def find_similar_incidents(
         # the longer full incident row.
         doc.metadata["semantic_score"] = semantic_score
         doc.metadata["lexical_score"] = word_score
-        doc.metadata["intent_adjustment"] = adjustment
         scored_matches.append((doc, hybrid_score))
     scored_matches.sort(key=lambda item: item[1], reverse=True)
+
     matches = [
         (doc, score)
         for doc, score in scored_matches
@@ -697,8 +621,9 @@ def main() -> None:
             "Minimum match score", 0.0, 1.0, 0.45, 0.05,
             key="minimum_match_score_v2",
             help=(
-                "Hybrid score: 70% semantic similarity and 30% matching symptom "
-                "words. Rows below this score are excluded."
+                "Complete-row embeddings and field-weighted lexical retrieval "
+                "prioritize each row's title and detailed description. Rows below "
+                "this final relevance score are excluded."
             ),
         )
         search_scope = st.radio(

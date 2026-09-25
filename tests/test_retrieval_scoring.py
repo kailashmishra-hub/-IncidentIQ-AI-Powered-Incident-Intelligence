@@ -1,82 +1,45 @@
 import RAG_05_SimilarIncidentsFinder as app
 
 
-QUERY = "Users cannot login to the application"
+QUERY = "Service requests fail during submission"
 
-LOGIN_OUTAGE = """
-Incident ID: INC-2026-003
-Title: Mobile banking app login failures - authentication token service outage
-Detailed Description: Customers attempting to log into the mobile application
-received 'Unable to verify your credentials' for all login attempts.
-Root Cause: The OAuth token service exhausted its Redis connections.
+RELEVANT_INCIDENT = """
+Incident ID: SAMPLE-1
+Title: Service request submission failures
+Detailed Description: Customers receive an error whenever they submit a request.
+Root Cause: A downstream connection pool was exhausted.
 """
 
-SECURITY_EVENT = """
-Incident ID: INC-2026-007
-Title: Unauthorized access attempt detected on internal admin console
-Detailed Description: Failed login attempts against a privileged administrator
-account were followed by a successful login from an unusual IP address.
-Root Cause: The privileged account and VPN credential were compromised by an attacker.
+METADATA_ONLY_MATCH = """
+Incident ID: SAMPLE-2
+Title: Scheduled reporting maintenance
+Detailed Description: The reporting job completed normally.
+Related Incidents: Service requests fail during submission
 """
-
-DDOS_LOGIN_OUTAGE = """
-Incident ID: INC-2026-013
-Title: Distributed denial-of-service attack against online banking login page
-Detailed Description: Customers could not reach the online banking login page
-during the DDoS attack.
-"""
-
-
-def test_login_outage_scores_above_security_event_at_equal_semantic_similarity():
-    outage_score, _, outage_adjustment = app.hybrid_relevance_score(
-        QUERY, LOGIN_OUTAGE, semantic_score=0.70
-    )
-    security_score, _, security_adjustment = app.hybrid_relevance_score(
-        QUERY, SECURITY_EVENT, semantic_score=0.70
-    )
-
-    assert outage_adjustment > 0
-    assert security_adjustment < 0
-    assert outage_score > security_score
-    assert outage_score >= 0.45
-    assert security_score < 0.45
-
-
-def test_login_synonyms_are_normalized_for_lexical_matching():
-    query_tokens = app.meaningful_tokens(QUERY)
-    incident_tokens = app.meaningful_tokens(LOGIN_OUTAGE)
-
-    assert "authenticationfailure" in query_tokens
-    assert "authenticationfailure" in incident_tokens
-    assert "customer" in query_tokens
-    assert "application" in query_tokens
-
-
-def test_ddos_that_blocks_login_is_treated_as_availability_incident():
-    score, _, adjustment = app.hybrid_relevance_score(
-        QUERY, DDOS_LOGIN_OUTAGE, semantic_score=0.55
-    )
-
-    assert adjustment > 0
-    assert score >= 0.45
 
 
 def test_embedding_text_emphasizes_title_and_details_without_creating_chunks():
-    weighted = app.weighted_retrieval_text(LOGIN_OUTAGE)
+    weighted = app.weighted_retrieval_text(RELEVANT_INCIDENT)
 
     assert weighted.count("Primary incident title:") == 3
     assert weighted.count("Primary incident details:") == 2
-    assert weighted.startswith(LOGIN_OUTAGE)
+    assert weighted.startswith(RELEVANT_INCIDENT)
 
 
 def test_lexical_score_prioritizes_title_and_detailed_description():
-    metadata_only_match = """
-Incident ID: INC-X
-Title: Scheduled account maintenance
-Detailed Description: Routine maintenance completed normally.
-Related Incidents: Users cannot login to the application
-"""
-
-    relevant_score = app.field_weighted_lexical_coverage(QUERY, LOGIN_OUTAGE)
-    metadata_score = app.field_weighted_lexical_coverage(QUERY, metadata_only_match)
+    relevant_score = app.field_weighted_lexical_coverage(
+        QUERY, RELEVANT_INCIDENT
+    )
+    metadata_score = app.field_weighted_lexical_coverage(
+        QUERY, METADATA_ONLY_MATCH
+    )
     assert relevant_score > metadata_score
+
+
+def test_hybrid_score_is_generic_and_bounded():
+    score, lexical_score = app.hybrid_relevance_score(
+        QUERY, RELEVANT_INCIDENT, semantic_score=0.75
+    )
+
+    assert 0.0 <= score <= 1.0
+    assert 0.0 <= lexical_score <= 1.0
