@@ -352,7 +352,8 @@ def meaningful_tokens(text: str) -> set[str]:
     normalized = text.lower()
     stop_words = {
         "a", "an", "and", "are", "for", "in", "is", "of", "on", "the",
-        "to", "was", "were", "with",
+        "to", "was", "were", "with", "issue", "issues", "incident",
+        "incidents", "problem", "problems",
     }
     return {
         token.rstrip("s")
@@ -380,13 +381,19 @@ def field_weighted_lexical_coverage(query: str, incident: str) -> float:
     overall_score = lexical_coverage(query, incident)
     title_score = lexical_coverage(query, title) if title else overall_score
     detail_score = lexical_coverage(query, details) if details else overall_score
-    return 0.50 * title_score + 0.35 * detail_score + 0.15 * overall_score
+    return 0.60 * title_score + 0.25 * detail_score + 0.15 * overall_score
 
 
 def hybrid_relevance_score(query: str, incident: str, semantic_score: float) -> tuple[float, float]:
     """Combine generic semantic and field-weighted lexical relevance."""
     word_score = field_weighted_lexical_coverage(query, incident)
-    score = 0.70 * semantic_score + 0.30 * word_score
+    # Embedding similarity is less stable for very short prompts. When only one
+    # or two meaningful terms remain, exact title/detail evidence receives more
+    # weight. Longer descriptions retain semantic-first scoring.
+    if len(meaningful_tokens(query)) <= 2:
+        score = 0.40 * semantic_score + 0.60 * word_score
+    else:
+        score = 0.70 * semantic_score + 0.30 * word_score
     return max(0.0, min(1.0, score)), word_score
 
 

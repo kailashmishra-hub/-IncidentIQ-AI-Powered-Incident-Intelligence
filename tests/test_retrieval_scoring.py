@@ -43,3 +43,26 @@ def test_hybrid_score_is_generic_and_bounded():
 
     assert 0.0 <= score <= 1.0
     assert 0.0 <= lexical_score <= 1.0
+
+
+def test_short_generic_query_prioritizes_title_match():
+    title_match = """
+Incident ID: SAMPLE-3
+Title: Submission failures
+Detailed Description: Requests cannot be submitted.
+"""
+    detail_only_match = """
+Incident ID: SAMPLE-4
+Title: Scheduled maintenance
+Detailed Description: Historical notes mention submission processing.
+"""
+
+    assert app.meaningful_tokens("Submission issues") == {"submission"}
+    title_score, _ = app.hybrid_relevance_score(
+        "Submission issues", title_match, semantic_score=0.40
+    )
+    detail_score, _ = app.hybrid_relevance_score(
+        "Submission issues", detail_only_match, semantic_score=0.40
+    )
+    assert title_score >= 0.45
+    assert title_score > detail_score
