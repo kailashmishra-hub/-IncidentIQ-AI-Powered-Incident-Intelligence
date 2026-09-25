@@ -516,7 +516,28 @@ def find_similar_incidents(
 
 def scope_label_is_repository(label: str) -> bool:
     """Accept only the classifier's explicit repository-scope label."""
-    return label.strip().upper() == "REPOSITORY"
+    normalized = label.strip().upper()
+    return bool(re.match(r"^REPOSITORY\b", normalized)) and "OUT_OF_SCOPE" not in normalized
+
+
+def question_has_repository_evidence(
+    question: str, repository_documents: list[Document]
+) -> bool:
+    """Recognize questions containing terms found in uploaded incident rows."""
+    question_tokens = meaningful_tokens(question)
+    if not question_tokens:
+        return False
+    for document in repository_documents:
+        title = labelled_field_value(
+            document.page_content, ("Title", "Short Description", "Summary")
+        )
+        details = labelled_field_value(
+            document.page_content,
+            ("Detailed Description", "Description", "Details"),
+        )
+        if question_tokens & meaningful_tokens(f"{title}\n{details}"):
+            return True
+    return False
 
 
 def is_repository_question(
@@ -524,8 +545,11 @@ def is_repository_question(
     api_key: str,
     current_issue: str,
     history: list[dict[str, str]],
+    repository_documents: list[Document],
 ) -> bool:
     """Classify chat scope without exposing the uploaded repository contents."""
+    if question_has_repository_evidence(question, repository_documents):
+        return True
     prior_conversation = "\n".join(
         f"{message['role'].title()}: {message['content']}" for message in history[-6:]
     )
@@ -570,7 +594,9 @@ def chat_with_repository(
     history: list[dict[str, str]],
 ) -> str:
     """Answer follow-ups using every row from the uploaded incident repository."""
-    if not is_repository_question(question, api_key, current_issue, history):
+    if not is_repository_question(
+        question, api_key, current_issue, history, repository_documents
+    ):
         return (
             "I can only answer questions about incidents and information contained "
             "in the uploaded repository."

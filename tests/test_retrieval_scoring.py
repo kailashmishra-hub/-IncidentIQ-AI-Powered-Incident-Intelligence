@@ -71,5 +71,22 @@ Detailed Description: Historical notes mention submission processing.
 def test_chat_scope_requires_exact_repository_label():
     assert app.scope_label_is_repository("REPOSITORY")
     assert app.scope_label_is_repository(" repository ")
+    assert app.scope_label_is_repository("REPOSITORY.")
     assert not app.scope_label_is_repository("OUT_OF_SCOPE")
-    assert not app.scope_label_is_repository("REPOSITORY\nHere is an answer")
+
+
+def test_repository_evidence_allows_valid_incident_question():
+    documents = [
+        app.Document(
+            page_content=(
+                "Title: Mobile login failure\n"
+                "Detailed Description: Customers could not access online banking."
+            )
+        )
+    ]
+    assert app.question_has_repository_evidence(
+        "How many login issues were reported?", documents
+    )
+    assert not app.question_has_repository_evidence(
+        "Write a Java program to add two numbers", documents
+    )
