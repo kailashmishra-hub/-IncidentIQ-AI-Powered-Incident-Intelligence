@@ -66,3 +66,10 @@ Detailed Description: Historical notes mention submission processing.
     )
     assert title_score >= 0.45
     assert title_score > detail_score
+
+
+def test_chat_scope_requires_exact_repository_label():
+    assert app.scope_label_is_repository("REPOSITORY")
+    assert app.scope_label_is_repository(" repository ")
+    assert not app.scope_label_is_repository("OUT_OF_SCOPE")
+    assert not app.scope_label_is_repository("REPOSITORY\nHere is an answer")
