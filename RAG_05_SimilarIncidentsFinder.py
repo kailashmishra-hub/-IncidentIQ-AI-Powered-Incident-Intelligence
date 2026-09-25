@@ -321,6 +321,32 @@ def serialize_documents(
     )
 
 
+def labelled_field_value(text: str, aliases: tuple[str, ...]) -> str:
+    """Return a field value from the labelled one-row document text."""
+    normalized_aliases = {normalize_column_name(alias) for alias in aliases}
+    for line in text.splitlines():
+        label, separator, value = line.partition(":")
+        if separator and normalize_column_name(label) in normalized_aliases:
+            return value.strip()
+    return ""
+
+
+def weighted_retrieval_text(text: str) -> str:
+    """Emphasize issue description fields while preserving one vector per row."""
+    title = labelled_field_value(text, ("Title", "Short Description", "Summary"))
+    details = labelled_field_value(
+        text, ("Detailed Description", "Description", "Details")
+    )
+    emphasized_sections = [text]
+    # Repetition changes term weight inside this row's single embedding; it does
+    # not create extra documents, chunks, overlap, or vectors.
+    if title:
+        emphasized_sections.extend([f"Primary incident title: {title}"] * 3)
+    if details:
+        emphasized_sections.extend([f"Primary incident details: {details}"] * 2)
+    return "\n".join(emphasized_sections)
+
+
 def meaningful_tokens(text: str) -> set[str]:
     """Normalize words for a small lexical signal alongside semantic search."""
     normalized = re.sub(r"\blog[ -]?in\b", "login", text.lower())
@@ -354,6 +380,20 @@ def lexical_coverage(query: str, incident: str) -> float:
     if not query_tokens:
         return 0.0
     return len(query_tokens & meaningful_tokens(incident)) / len(query_tokens)
+
+
+def field_weighted_lexical_coverage(query: str, incident: str) -> float:
+    """Prioritize title and detailed description over secondary row fields."""
+    title = labelled_field_value(
+        incident, ("Title", "Short Description", "Summary")
+    )
+    details = labelled_field_value(
+        incident, ("Detailed Description", "Description", "Details")
+    )
+    overall_score = lexical_coverage(query, incident)
+    title_score = lexical_coverage(query, title) if title else overall_score
+    detail_score = lexical_coverage(query, details) if details else overall_score
+    return 0.50 * title_score + 0.35 * detail_score + 0.15 * overall_score
 
 
 def authentication_availability_query(text: str) -> bool:
@@ -420,7 +460,7 @@ def intent_adjustment(query: str, incident: str) -> float:
 
 def hybrid_relevance_score(query: str, incident: str, semantic_score: float) -> tuple[float, float, float]:
     """Combine semantic, lexical, and intent signals into a bounded score."""
-    word_score = lexical_coverage(query, incident)
+    word_score = field_weighted_lexical_coverage(query, incident)
     adjustment = intent_adjustment(query, incident)
     score = 0.65 * semantic_score + 0.35 * word_score + adjustment
     return max(0.0, min(1.0, score)), word_score, adjustment
@@ -459,7 +499,7 @@ def build_vector_store(
     """Create one vector per complete incident row."""
     documents = [
         Document(
-            page_content=content,
+            page_content=weighted_retrieval_text(content),
             metadata={
                 "source": source,
                 "sheet": sheet,
@@ -467,6 +507,7 @@ def build_vector_store(
                 "created_date": created_date,
                 "resolved_date": resolved_date,
                 "display_text": display_text,
+                "original_content": content,
             },
         )
         for source, sheet, row, created_date, resolved_date, display_text, content in records
@@ -502,6 +543,9 @@ def find_similar_incidents(
     # which converts to cosine similarity as: cosine = 1 - distance / 2.
     scored_matches = []
     for doc, distance in candidates:
+        # Search vectors use weighted text, while results and prompts retain the
+        # original incident row without repeated fields.
+        doc.page_content = str(doc.metadata.get("original_content", doc.page_content))
         semantic_score = max(0.0, min(1.0, 1.0 - float(distance) / 2.0))
         hybrid_score, word_score, adjustment = hybrid_relevance_score(
             query, doc.page_content, semantic_score
