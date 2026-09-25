@@ -388,6 +388,10 @@ def intent_adjustment(query: str, incident: str) -> float:
         "could not login",
         "could not log in",
         "generic error",
+        "denial-of-service",
+        "denial of service",
+        "ddos",
+        "login page unavailable",
     )
     security_markers = (
         "unauthorized access",

@@ -19,6 +19,13 @@ account were followed by a successful login from an unusual IP address.
 Root Cause: The privileged account and VPN credential were compromised by an attacker.
 """
 
+DDOS_LOGIN_OUTAGE = """
+Incident ID: INC-2026-013
+Title: Distributed denial-of-service attack against online banking login page
+Detailed Description: Customers could not reach the online banking login page
+during the DDoS attack.
+"""
+
 
 def test_login_outage_scores_above_security_event_at_equal_semantic_similarity():
     outage_score, _, outage_adjustment = app.hybrid_relevance_score(
@@ -43,3 +50,12 @@ def test_login_synonyms_are_normalized_for_lexical_matching():
     assert "authenticationfailure" in incident_tokens
     assert "customer" in query_tokens
     assert "application" in query_tokens
+
+
+def test_ddos_that_blocks_login_is_treated_as_availability_incident():
+    score, _, adjustment = app.hybrid_relevance_score(
+        QUERY, DDOS_LOGIN_OUTAGE, semantic_score=0.55
+    )
+
+    assert adjustment > 0
+    assert score >= 0.45
